@@ -31,10 +31,10 @@
 <body>
     <h2>Flow Cytometry Event Calculator</h2>
     <label for="percent">percent of population of interest (e.g., 0.001 means 0.1%):</label>
-    <input type="number" id="percent" step="any" value="0.0001">
+    <input type="number" id="percent" step="0.0001" value="0.0001">
 
     <label for="cv">CV of population of interest (e.g., 0.05 means 5%):</label>
-    <input type="number" id="cv" step="any" value="0.05">
+    <input type="number" id="cv" step="0.01" value="0.05">
 
     <button onclick="calculate()">Calculate</button>
 
@@ -196,3 +196,4 @@
         }
     </script>
 </body>
+
