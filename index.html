@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Event Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+        }
+        label, input {
+            display: block;
+            margin: 10px 0;
+        }
+        button {
+            margin-top: 20px;
+        }
+        .result {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        #chartContainer {
+            margin-top: 30px;
+            text-align: center;
+        }
+        canvas {
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <h2>Flow Cytometry Event Calculator</h2>
+    <label for="percent">percent of population of interest (e.g., 0.001 means 0.1%):</label>
+    <input type="number" id="percent" step="any" value="0.0001">
+
+    <label for="cv">CV of population of interest (e.g., 0.05 means 5%):</label>
+    <input type="number" id="cv" step="any" value="0.05">
+
+    <button onclick="calculate()">Calculate</button>
+
+    <div class="result" id="result"></div>
+
+    <div id="chartContainer">
+        <canvas id="chart" width="700" height="500"></canvas>
+    </div>
+
+    <script>
+        function formatScientific(num) {
+            const exponent = Math.floor(Math.log10(num));
+            const mantissa = num / Math.pow(10, exponent);
+            return `${mantissa.toFixed(2)} × 10^${exponent}`;
+        }
+
+        function calculate() {
+            const percent = parseFloat(document.getElementById("percent").value);
+            const cv = parseFloat(document.getElementById("cv").value);
+
+            if (isNaN(percent) || isNaN(cv) || percent <= 0 || cv <= 0) {
+                document.getElementById("result").innerHTML = "Please enter valid positive numbers.";
+                return;
+            }
+
+            const count_target_events = 1 / Math.pow(cv, 2);
+            const count_total_events = count_target_events / percent;
+
+            document.getElementById("result").innerHTML = `
+                no of events of interest = ${Math.round(count_target_events)}<br>
+                no of total events = ${formatScientific(count_total_events)}
+            `;
+
+            const percentValues = [];
+            const logMin = Math.log10(percent) - 2;
+            const logMax = Math.log10(percent) + 2;
+            for (let i = 0; i < 5; i++) {
+                percentValues.push(Math.pow(10, logMin + i * (logMax - logMin) / 4));
+            }
+
+            // Three CV values: half, original, double
+            const cvs = [cv / 2, cv, cv * 2];
+            const colors = ["#28a745", "#007bff", "#ff9800"]; // green, blue, orange
+            const labels = cvs.map(c => `CV: ${(c * 100).toFixed(1)}%`);
+
+            const datasets = cvs.map(c => {
+                const count_target = 1 / Math.pow(c, 2);
+                return percentValues.map(p => count_target / p);
+            });
+
+            drawLogLogChart(percentValues, datasets, colors, labels);
+        }
+
+        function drawLogLogChart(xValues, datasets, colors, labels) {
+            const canvas = document.getElementById("chart");
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const padding = 80;
+            const width = canvas.width - padding * 2;
+            const height = canvas.height - padding * 2;
+
+            const allY = datasets.flat();
+            const logXMin = Math.log10(Math.min(...xValues));
+            const logXMax = Math.log10(Math.max(...xValues));
+            const logYMin = Math.log10(Math.min(...allY));
+            const logYMax = Math.log10(Math.max(...allY));
+
+            // Axes
+            ctx.strokeStyle = "#000";
+            ctx.beginPath();
+            ctx.moveTo(padding, padding);
+            ctx.lineTo(padding, padding + height);
+            ctx.lineTo(padding + width, padding + height);
+            ctx.stroke();
+
+            // Axis labels
+            ctx.font = "14px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("percent of population of interest", padding + width / 2, padding + height + 50);
+
+            ctx.save();
+            ctx.translate(padding - 60, padding + height / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText("no of total events", 0, 0);
+            ctx.restore();
+
+            // Ticks
+            ctx.font = "12px Arial";
+            ctx.textAlign = "center";
+            for (let i = Math.floor(logXMin); i <= Math.ceil(logXMax); i++) {
+                const x = padding + ((i - logXMin) / (logXMax - logXMin)) * width;
+                ctx.moveTo(x, padding + height);
+                ctx.lineTo(x, padding + height + 5);
+                ctx.stroke();
+                ctx.fillText(`10^${i}`, x, padding + height + 20);
+            }
+
+            ctx.textAlign = "right";
+            for (let i = Math.floor(logYMin); i <= Math.ceil(logYMax); i++) {
+                const y = padding + height - ((i - logYMin) / (logYMax - logYMin)) * height;
+                ctx.moveTo(padding - 5, y);
+                ctx.lineTo(padding, y);
+                ctx.stroke();
+                ctx.fillText(`10^${i}`, padding - 10, y + 4);
+            }
+
+            // Draw curves
+            datasets.forEach((yValues, idx) => {
+                ctx.strokeStyle = colors[idx];
+                ctx.beginPath();
+                xValues.forEach((xVal, i) => {
+                    const logX = Math.log10(xVal);
+                    const logY = Math.log10(yValues[i]);
+                    const x = padding + ((logX - logXMin) / (logXMax - logXMin)) * width;
+                    const y = padding + height - ((logY - logYMin) / (logYMax - logYMin)) * height;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+
+                // Points
+                xValues.forEach((xVal, i) => {
+                    const logX = Math.log10(xVal);
+                    const logY = Math.log10(yValues[i]);
+                    const x = padding + ((logX - logXMin) / (logXMax - logXMin)) * width;
+                    const y = padding + height - ((logY - logYMin) / (logYMax - logYMin)) * height;
+
+                    ctx.beginPath();
+                    ctx.fillStyle = colors[idx];
+                    let radius = 3;
+                    function formatScientific(num) {
+                        const exponent = Math.floor(Math.log10(num));
+                        const mantissa = num / Math.pow(10, exponent);
+                        return `${mantissa.toFixed(2)} ×10^${exponent}`;
+                    }
+                    if (idx === 1 && i === 2) radius = 8; // Highlight middle point for main curve
+		    if (idx === 1 && i === 2) {
+		        const xValFormatted = formatScientific(xVal);
+		        const yValFormatted = formatScientific(yValues[i]);
+		        ctx.font = "12px Arial";
+		        ctx.textAlign = "left";
+		        ctx.fillText(`(${xValFormatted}, ${yValFormatted})`, x + 10, y - 10);
+		    }
+                    ctx.arc(x, y, radius, 0, 2 * Math.PI);
+                    ctx.fill();
+                });
+            });
+
+            // Legend
+            ctx.font = "14px Arial";
+            ctx.textAlign = "left";
+            labels.forEach((label, i) => {
+                ctx.fillStyle = colors[i];
+                ctx.fillRect(padding + width - 140, padding + i * 20, 12, 12);
+                ctx.fillStyle = "#000";
+                ctx.fillText(label, padding + width - 120, padding + i * 20 + 10);
+            });
+        }
+    </script>
+</body>
